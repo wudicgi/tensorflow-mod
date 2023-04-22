@@ -24,11 +24,45 @@ limitations under the License.
 #include "tensorflow/core/platform/env.h"
 #include "tensorflow/core/protobuf/saved_model.pb.h"
 
+#include <Windows.h>
+
 namespace tensorflow {
 namespace {
 
 Status ReadSavedModel(const string& export_dir, SavedModel* saved_model_proto) {
   LOG(INFO) << "Reading SavedModel from: " << export_dir;
+
+  char env_saved_model_filename_pb[MAX_PATH] = {0};
+  DWORD env_saved_model_filename_pb_length = GetEnvironmentVariableA("TF_CPP_SAVED_MODEL_FILENAME_PB", env_saved_model_filename_pb, MAX_PATH);
+  if ((env_saved_model_filename_pb_length > 0) && (env_saved_model_filename_pb_length < MAX_PATH)) {
+    LOG(INFO) << "Environment variable TF_CPP_SAVED_MODEL_FILENAME_PB is set: " << env_saved_model_filename_pb;
+    const string alt_saved_model_pb_path =
+        io::JoinPath(export_dir, env_saved_model_filename_pb);
+    if (Env::Default()->FileExists(alt_saved_model_pb_path).ok()) {
+      LOG(INFO) << "Will use " << env_saved_model_filename_pb << " instead of " << kSavedModelFilenamePb;
+      return ReadBinaryProto(Env::Default(), alt_saved_model_pb_path,
+                             saved_model_proto);
+    } else {
+      return Status(error::Code::NOT_FOUND,
+                    "Could not find the specified .pb file: " + alt_saved_model_pb_path);
+    }
+  }
+
+  char env_saved_model_filename_pbtxt[MAX_PATH] = {0};
+  DWORD env_saved_model_filename_pbtxt_length = GetEnvironmentVariableA("TF_CPP_SAVED_MODEL_FILENAME_PBTXT", env_saved_model_filename_pbtxt, MAX_PATH);
+  if ((env_saved_model_filename_pbtxt_length > 0) && (env_saved_model_filename_pbtxt_length < MAX_PATH)) {
+    LOG(INFO) << "Environment variable TF_CPP_SAVED_MODEL_FILENAME_PBTXT is set: " << env_saved_model_filename_pbtxt;
+    const string alt_saved_model_pbtxt_path =
+        io::JoinPath(export_dir, env_saved_model_filename_pbtxt);
+    if (Env::Default()->FileExists(alt_saved_model_pbtxt_path).ok()) {
+      LOG(INFO) << "Will use " << env_saved_model_filename_pbtxt << " instead of " << kSavedModelFilenamePbTxt;
+      return ReadTextProto(Env::Default(), alt_saved_model_pbtxt_path,
+                           saved_model_proto);
+    } else {
+      return Status(error::Code::NOT_FOUND,
+                    "Could not find the specified .pbtxt file: " + alt_saved_model_pbtxt_path);
+    }
+  }
 
   const string saved_model_pb_path =
       io::JoinPath(export_dir, kSavedModelFilenamePb);
